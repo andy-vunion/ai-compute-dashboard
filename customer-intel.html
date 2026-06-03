@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>客户情报看板 v1</title>
+<style>
+:root {
+  --bg: #0f1117; --card: #1a1d2e; --border: #2a2f45;
+  --text: #e0e4f0; --muted: #7b8299; --blue: #3b82f6;
+  --green: #10b981; --red: #ef4444; --yellow: #f59e0b; --purple: #8b5cf6;
+  --radius: 8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system,'PingFang SC',sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }
+.header { padding:16px 20px; background:var(--card); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:16px; }
+.header h1 { font-size:18px; background:linear-gradient(135deg,var(--blue),var(--purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.header .meta { font-size:12px; color:var(--muted); margin-left:auto; }
+.dashboard { display:flex; height:calc(100vh - 57px); }
+.main { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px; }
+.right { width:360px; border-left:1px solid var(--border); overflow-y:auto; background:var(--card); }
+
+/* Stats row */
+.stats-row { display:flex; gap:10px; flex-wrap:wrap; }
+.stat-card { flex:1 1 140px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; min-width:130px; }
+.stat-card .label { font-size:11px; color:var(--muted); }
+.stat-card .value { font-size:20px; font-weight:700; margin-top:2px; }
+.stat-card .sub { font-size:10px; color:var(--muted); margin-top:2px; }
+
+/* Customer table */
+.customer-table { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.table-header { padding:10px 14px; font-weight:600; font-size:13px; border-bottom:1px solid var(--border); display:flex; gap:12px; align-items:center; }
+.table-header input { flex:1; padding:6px 10px; border-radius:6px; background:var(--bg); border:1px solid var(--border); color:var(--text); font-size:12px; outline:none; }
+.table-header input:focus { border-color:var(--blue); }
+.table-wrap { overflow-x:auto; max-height:400px; overflow-y:auto; }
+table { width:100%; border-collapse:collapse; font-size:11px; }
+th { text-align:left; padding:7px 10px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--card); z-index:1; cursor:pointer; }
+th:hover { color:var(--text); }
+td { padding:7px 10px; border-bottom:1px solid rgba(255,255,255,0.03); }
+tr:hover td { background:rgba(255,255,255,0.02); cursor:pointer; }
+tr.selected td { background:rgba(59,130,246,0.1); }
+.tag { font-size:9px; padding:2px 6px; border-radius:8px; white-space:nowrap; }
+.tag-a { background:rgba(16,185,129,0.12); color:var(--green); }
+.tag-b { background:rgba(59,130,246,0.12); color:var(--blue); }
+.tag-c { background:rgba(139,92,246,0.12); color:var(--purple); }
+.score-bar { width:40px; height:4px; background:rgba(255,255,255,0.05); border-radius:2px; overflow:hidden; display:inline-block; vertical-align:middle; margin-right:4px; }
+.score-bar .fill { height:100%; border-radius:2px; }
+.rev { font-family:'SF Mono',Consolas,monospace; text-align:right; }
+.rev-up { color:var(--green); }
+.rev-down { color:var(--red); }
+
+/* Detail panel */
+.detail-panel { padding:14px; }
+.detail-panel h3 { font-size:15px; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+.detail-section { margin-bottom:14px; }
+.detail-section .s-title { font-size:11px; color:var(--muted); margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }
+.detail-section .s-text { font-size:12px; color:var(--text); line-height:1.6; }
+.empty-state { padding:40px; text-align:center; color:var(--muted); font-size:13px; }
+
+/* Tracking list */
+.tracking-list { padding:14px; }
+.tracking-item { padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:11px; }
+.tracking-item .t-week { color:var(--muted); font-size:10px; }
+.tracking-item .t-type { font-size:9px; padding:1px 5px; border-radius:6px; margin-right:6px; }
+.t-type-机会 { background:rgba(16,185,129,0.15); color:var(--green); }
+.t-type-风险 { background:rgba(239,68,68,0.15); color:var(--red); }
+.t-type-动态 { background:rgba(59,130,246,0.15); color:var(--blue); }
+.t-type-none { background:rgba(255,255,255,0.05); color:var(--muted); }
+
+.scrollbar::-webkit-scrollbar { width:4px; }
+.scrollbar::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📊 客户情报看板</h1>
+  <div class="meta"><span id="updateTime"></span></div>
+</div>
+<div class="dashboard">
+<div class="main scrollbar">
+  <div class="stats-row" id="statsRow"></div>
+  <div class="customer-table">
+    <div class="table-header">
+      核心客户
+      <input type="text" id="searchInput" placeholder="搜索客户..." />
+      <span style="font-size:11px;color:var(--muted)" id="rowCount"></span>
+    </div>
+    <div class="table-wrap scrollbar">
+      <table><thead><tr>
+        <th data-sort="name">客户</th><th data-sort="group">分组</th><th data-sort="score">战略分</th>
+        <th data-sort="rev">累计收入</th><th data-sort="ytd">年累计</th><th data-sort="margin">毛利率</th>
+      </tr></thead><tbody id="custBody"></tbody></table>
+    </div>
+  </div>
+</div>
+<div class="right scrollbar" id="detailPanel">
+  <div class="empty-state">← 点击客户查看详情</div>
+</div>
+</div>
+
+<script>
+const DATA = {"customers": [{"id": 23, "name": "深圳市杉川机器人有限公司", "group_tag": "C", "industry": "智能硬件/机器人", "total_rev": null, "strat_score": 5, "notes": "2026年爆发式增长（1-4月¥9973万=2025全年8.4倍）。高毛利（30%），康盈为主。扫地机器人赛道高速增长，持续放量可期。建议：优先保障康盈供应，探索普冉NOR Flash/传感器交叉销售。 [累计合作: ¥11350万]", "coop_history": "2023: ¥0万 (2笔) [康盈] | 2024: ¥193万 (13笔) [康盈,普冉] | 2025: ¥1184万 (65笔) [康盈] | 2026: ¥9973万 (38笔) [康盈]", "monitor_keywords": "杉川机器人 扫地机器人 融资 新品 产能 追觅 石头 科沃斯"}, {"id": 25, "name": "深圳市韶音科技有限公司", "group_tag": "C", "industry": "智能硬件/消费电子", "total_rev": null, "strat_score": 5, "notes": "2025年¥1027万→2026年1-4月¥2098万，增速513%。纯康盈线，高毛利（36%）。韶音自身70-80%毛利率对应高品控要求，对供应商稳定性要求高。建议：绑定核心供应关系，探索普冉NOR Flash/传感器切入。 [累计合作: ¥3125万]", "coop_history": "2025: ¥1027万 (27笔) [康盈] | 2026: ¥2098万 (19笔) [康盈]", "monitor_keywords": "韶音 Shokz 骨传导耳机 营收 新品 上市 IPO 融资"}, {"id": 31, "name": "广东九安智能科技股份有限公司", "group_tag": "B", "industry": "智能硬件/安防", "total_rev": null, "strat_score": 5, "notes": "最大多品牌客户（9条线），累计¥1.27亿。2026年+26%。爱科微和广和通为主。待验证：IPC出海关税影响。 [累计: ¥12667万]", "coop_history": "2023: ¥845万 (77笔) [CVTE,广和通,爱科微,顺络,思特威,普冉,东晶,康盈] | 2024: ¥4190万 (198笔) [广和通,爱科微,顺络,普冉,东晶] | 2025: ¥5374万 (205笔) [康盈,思特威,爱科微,普冉,东晶,广和通] | 2026: ¥2258万 (100笔) [爱科微,普冉,东晶,广和通,亚博达]", "monitor_keywords": "九安智能 安防 IPC 网络摄像机 智能家居 融资"}, {"id": 39, "name": "深圳市广和通无线股份有限公司", "group_tag": "E", "industry": "通信/IoT", "total_rev": null, "strat_score": 5, "notes": "累计¥4383万，但2025年仅¥2150（几乎为零），2026年1-4月¥4383万——全量2026爆发。与记忆中的广和通代理线吻合。 [累计: ¥4383万]", "coop_history": "2024: ¥0万 (10笔) [广和通] | 2025: ¥0万 (15笔) [深聪,广和通,思必驰] | 2026: ¥4383万 (18笔) [康盈,爱科微]", "monitor_keywords": "广和通 300638 5G模组 IoT 营收 新品 车载"}, {"id": 24, "name": "高创(苏州)电子有限公司", "group_tag": "C", "industry": "智能终端/显示", "total_rev": null, "strat_score": 4, "notes": "2025年仅¥283万→2026年1-4月¥8455万，爆发增长。纯康盈线，高毛利（42%）。需确认：增长是否可持续、是否有排他协议、京东方体系的采购决策机制。 [累计合作: ¥8738万]", "coop_history": "2025: ¥283万 (4笔) [康盈] | 2026: ¥8455万 (38笔) [康盈]", "monitor_keywords": "高创苏州电子 BOE 京东方 液晶电视 液晶显示器 车载 营收"}, {"id": 27, "name": "熵基科技(广东)有限公司", "group_tag": "C", "industry": "智能硬件/安防", "total_rev": null, "strat_score": 4, "notes": "2025年¥451万→2026年1-4月¥710万，增速373%。康盈+CVTE+深聪等5条线，高毛利（30%）。母公司上市，财务透明，采购体量有望持续增长。安防赛道国产替代趋势明显，康盈存储适配性强。 [累计合作: ¥1163万]", "coop_history": "2024: ¥2万 (11笔) [CVTE,凌耘微,深聪] | 2025: ¥451万 (91笔) [康盈,CVTE,深聪,思必驰] | 2026: ¥710万 (48笔) [CVTE,康盈]", "monitor_keywords": "熵基科技 ZKTeco 301330 安防 门禁 考勤 财报 新品 中标"}, {"id": 28, "name": "宁波舜宇光电信息有限公司", "group_tag": "A", "industry": "CCM模组", "total_rev": null, "strat_score": 4, "notes": "最大普冉客户，累计¥1.37亿。2026年略降（-19%），需关注苹果供应链导入进展。13条品牌线——粘性极强。待验证：进入苹果供应链后NOR Flash需求变化。 [累计: ¥13681万]", "coop_history": "2023: ¥3732万 (879笔) [普冉,CML,中瓷,韦尔通,武汉新芯,凌阳] | 2024: ¥3924万 (1132笔) [普冉,中瓷,禾星,,申泰,凌阳,台华达] | 2025: ¥4742万 (1344笔) [普冉,中瓷,线易,禾星,新宝华,申泰,上海芯璨,,凌阳] | 2026: ¥1282万 (553笔) [普冉,中瓷,禾星,线易]", "monitor_keywords": "舜宇光学 舜宇光电 摄像头模组 CCM 苹果供应链 出货量 02382"}, {"id": 29, "name": "南昌同兴达精密光电有限公司", "group_tag": "A", "industry": "CCM模组", "total_rev": null, "strat_score": 4, "notes": "累计¥3211万，普冉为主。2026年+66%稳健增长。多品牌（4条线）。 [累计: ¥3211万]", "coop_history": "2023: ¥706万 (265笔) [普冉,,凌阳,思特威] | 2024: ¥662万 (352笔) [凌阳,,普冉,思特威] | 2025: ¥1186万 (561笔) [普冉,,凌阳,思特威] | 2026: ¥656万 (404笔) [普冉,凌阳,思特威]", "monitor_keywords": "同兴达 002845 摄像头模组 CCM 营收 新品 客户"}, {"id": 32, "name": "深圳技威时代科技有限公司", "group_tag": "B", "industry": "智能硬件/安防", "total_rev": null, "strat_score": 4, "notes": "累计¥3594万，14条品牌线——粘性极高。2026年¥521万。 [累计: ¥3594万]", "coop_history": "2023: ¥185万 (21笔) [广和通,CVTE,思特威,格科微,安凯] | 2024: ¥382万 (66笔) [美信,晶相,思特威,芯圣,CVTE,普冉,康盈,广和通] | 2025: ¥2506万 (252笔) [普冉,思必驰,广和通,,思特威,安凯,富瀚微,爱科微,深聪] | 2026: ¥521万 (89笔) [普冉,安凯,广和通,爱科微]", "monitor_keywords": "技威时代 IPC 安防 摄像机 融资"}, {"id": 38, "name": "重庆海康威视科技有限公司", "group_tag": "D", "industry": "智能硬件/安防", "total_rev": null, "strat_score": 4, "notes": "累计¥1283万，深聪+思必驰为主。2026年¥356万+295%增长。海康体量巨大，深聪/思必驰线可深挖。 [累计: ¥1283万]", "coop_history": "2023: ¥86万 (14笔) [深聪,思必驰] | 2024: ¥570万 (39笔) [深聪,思必驰] | 2025: ¥271万 (38笔) [深聪] | 2026: ¥356万 (15笔) [深聪]", "monitor_keywords": "海康威视 安防 AI 深聪 思必驰 财报"}, {"id": 44, "name": "深圳市吉祥腾达科技有限公司", "group_tag": "F", "industry": "智能硬件/安防", "total_rev": null, "strat_score": 4, "notes": "⚠️累计¥3401万，但2026年¥112万（同比-94%）。唯一下滑最严重客户。高毛利(27%)多线。需优先排查：客户自身经营问题还是订单转移？ [累计: ¥3401万]", "coop_history": "2023: ¥294万 (52笔) [爱科微] | 2024: ¥1122万 (186笔) [普冉,爱科微,康盈,CVTE] | 2025: ¥1873万 (331笔) [普冉,康盈,爱科微] | 2026: ¥112万 (52笔) [普冉]", "monitor_keywords": "腾达 安防 智能硬件 网络设备"}, {"id": 26, "name": "深圳市鼎盛光电有限公司", "group_tag": "C", "industry": "智能硬件/显示", "total_rev": null, "strat_score": 3, "notes": "2025年¥192万→2026年1-4月¥598万，增速836%。康盈+普冉双线，毛利率极高（65%）。需确认：高毛利率的驱动因素（定制方案溢价？）、增长可持续性。体量较小但增速和毛利率值得关注。 [累计合作: ¥1185万]", "coop_history": "2023: ¥396万 (16笔) [康盈] | 2025: ¥192万 (3笔) [康盈,普冉] | 2026: ¥598万 (7笔) [康盈]", "monitor_keywords": "鼎盛光电 液晶驱动板 液晶电视 液晶广告机"}, {"id": 30, "name": "湖北三赢兴智能光电科技有限公司", "group_tag": "A", "industry": "CCM模组", "total_rev": null, "strat_score": 3, "notes": "累计¥2355万，普冉+思特威。15条品牌线——已深度绑定。2026年¥161万，略低于预期。 [累计: ¥2355万]", "coop_history": "2023: ¥780万 (621笔) [普冉,ALPHA,思特威,光合,,UVK,台湾光宝科技,其他,村田MURATA,Sigmastar,微芯,ST,ROBERT BOSCH,松下,旺宏,首尔,硕科 SCHOCK,村田,艾为,ZETTA/苏州澜智] | 2024: ¥796万 (661笔) [普冉,兰科,台湾光宝科技,,Sigmastar,杰理,泰晶,光合,瀚荃,TWGMC/台湾迪嘉,LEIDITECH/雷卯电子,达鑫,ST/意法,凯佳达,鸿星,汇顶,InvenSense,日清纺,艾为,南磁,TWGMC,HIROSE,QWYCONN,阜时,韩国动运,CFSensor,TM,HRS,TDK,循光] | 2025: ¥618万 (741笔) [普冉,艾为,德利,万连,,Sigmastar,ROBERT BOSCH,瀚荃,ST/意法,南磁,QWYCONN,CFSensor,TM,TDK,HRS,循光,LRC,BORN,山景,兴芯微,HRD,HUAYING,CHIPUP,YJE,森利威尔,QUECTEL,巨胜,首韩,瑞昱,欧密格,UVK,元精技术,村田,钰泰] | 2026: ¥161万 (231笔) [普冉,艾为,兴芯微,YJE,首韩,欧密格,元精技术,国光,思特威,万连]", "monitor_keywords": "三赢兴 摄像头模组 CCM 车载 咸宁"}, {"id": 33, "name": "杭州觅睿科技股份有限公司", "group_tag": "B", "industry": "智能硬件/安防", "total_rev": null, "strat_score": 3, "notes": "累计¥2632万，思特威为主。2026年¥121万。9条品牌线。 [累计: ¥2632万]", "coop_history": "2023: ¥1103万 (180笔) [广和通,君正,思特威,友旺,普冉,矽力杰,CVTE] | 2024: ¥977万 (131笔) [思特威,美信,君正,友旺,普冉,CVTE] | 2025: ¥430万 (75笔) [思特威,美信,康盈,广和通] | 2026: ¥121万 (31笔) [广和通,思特威,美信,康盈]", "monitor_keywords": "觅睿科技 智能摄像机 智能家居 融资 新品"}, {"id": 34, "name": "深圳市必联电子有限公司", "group_tag": "B", "industry": "智能硬件/安防", "total_rev": null, "strat_score": 3, "notes": "累计¥2257万，爱科微单品牌高度依赖。2026年¥27万——大幅下滑，待排查。 [累计: ¥2257万]", "coop_history": "2024: ¥346万 (43笔) [爱科微] | 2025: ¥1884万 (219笔) [CVTE,爱科微] | 2026: ¥27万 (6笔) [爱科微]", "monitor_keywords": "必联电子 WiFi模组 路由器 融资"}, {"id": 36, "name": "深圳康佳电子科技有限公司", "group_tag": "D", "industry": "智能终端/显示", "total_rev": null, "strat_score": 3, "notes": "累计¥7957万，康盈+Hynix+三星+KIOXIA多品牌。2026年¥2504万。康佳是康盈母公司的母公司——深度绑定关系。 [累计: ¥7957万]", "coop_history": "2023: ¥0万 (1笔) [CVTE] | 2024: ¥0万 (1笔) [康盈] | 2025: ¥5453万 (109笔) [康盈,KIOXIA,三星,Hynix] | 2026: ¥2504万 (44笔) [康盈]", "monitor_keywords": "康佳集团 000016 康盈 智能电视 营收 新品"}, {"id": 41, "name": "苏州米克罗电子科技有限公司", "group_tag": "F", "industry": "其他", "total_rev": null, "strat_score": 3, "notes": "累计¥2605万，纯普冉单品牌。2026年¥1587万+367%增长。待调研：客户身份（是代理还是终端？）。 [累计: ¥2605万]", "coop_history": "2025: ¥1018万 (47笔) [普冉] | 2026: ¥1587万 (43笔) [普冉]", "monitor_keywords": "苏州米克罗电子 普冉"}, {"id": 42, "name": "河南皓泽电子股份有限公司", "group_tag": "F", "industry": "CCM模组/精密制造", "total_rev": null, "strat_score": 3, "notes": "累计¥1860万，纯普冉。2026年¥334万。单品牌依赖风险。 [累计: ¥1860万]", "coop_history": "2024: ¥4万 (5笔) [普冉] | 2025: ¥1530万 (89笔) [普冉] | 2026: ¥326万 (40笔) [普冉]", "monitor_keywords": "皓泽电子 VCM马达 IPO 摄像头 精密制造"}, {"id": 35, "name": "深圳市极赛科技有限公司", "group_tag": "B", "industry": "智能硬件/安防", "total_rev": null, "strat_score": 2, "notes": "累计¥1126万，普冉单品牌依赖。2026年¥133万。品牌集中度风险。 [累计: ¥1126万]", "coop_history": "2023: ¥2万 (12笔) [普冉] | 2024: ¥403万 (169笔) [普冉,,维尔乐思] | 2025: ¥588万 (300笔) [普冉,维尔乐思,] | 2026: ¥133万 (71笔) [普冉]", "monitor_keywords": "极赛科技 IPC 安防"}, {"id": 37, "name": "阿里云计算有限公司", "group_tag": "D", "industry": "云计算/AI", "total_rev": null, "strat_score": 2, "notes": "累计¥1526万，但2025-2026年零交易——可能是历史项目一次性采购。非持续合作客户。 [累计: ¥1526万]", "coop_history": "2023: ¥113万 (2笔) [晶视] | 2024: ¥1412万 (5笔) [为旌]", "monitor_keywords": "阿里云 通义 大模型 营收 数据中心"}, {"id": 40, "name": "宜宾盈通智能技术有限公司", "group_tag": "E", "industry": "通信/IoT", "total_rev": null, "strat_score": 2, "notes": "累计¥1384万，但2026年几乎零交易——待排查客户流失。 [累计: ¥1384万]", "coop_history": "2023: ¥229万 (40笔) [思特威,普冉] | 2024: ¥831万 (81笔) [思特威,普冉] | 2025: ¥323万 (83笔) [普冉,思特威] | 2026: ¥1万 (5笔) [普冉]", "monitor_keywords": "宜宾盈通 IoT 通信"}, {"id": 43, "name": "深圳市卓芯微科技有限公司", "group_tag": "F", "industry": "其他", "total_rev": null, "strat_score": 2, "notes": "累计¥1090万，纯普冉。2026年¥780万持增。待调研客户身份。 [累计: ¥1090万]", "coop_history": "2024: ¥34万 (28笔) [普冉] | 2025: ¥276万 (103笔) [普冉] | 2026: ¥780万 (85笔) [普冉]", "monitor_keywords": "卓芯微 普冉 深圳"}], "tracking": [{"week": "2026-05-25", "customer": "高创(苏州)电子有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "阿里云计算有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "重庆海康威视科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "苏州米克罗电子科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "熵基科技(广东)有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "湖北三赢兴智能光电科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "深圳技威时代科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "深圳康佳电子科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "深圳市鼎盛光电有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "深圳市韶音科技有限公司", "type": "opportunity", "summary": "5月15日Shokz Day发布三款新品：OpenDots 2、OpenSwim Pro 2、OpenDots Air，品牌升级'随我动听'全场景声态", "source": "https://digital.cnmo.com/news/809115.html", "trend": "↑", "alert": null}, {"week": "2026-05-25", "customer": "深圳市极赛科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "深圳市杉川机器人有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "深圳市必联电子有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "深圳市广和通无线股份有限公司", "type": "dynamic", "summary": "3月公告拟全现金收购航盛电子(车载电子，成立超32年)；全年业绩稳健增长，端侧AI+机器人布局", "source": "https://m.nbd.com.cn/articles/2026-03-24/4306610.html", "trend": "↑", "alert": null}, {"week": "2026-05-25", "customer": "深圳市吉祥腾达科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "深圳市卓芯微科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "河南皓泽电子股份有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "杭州觅睿科技股份有限公司", "type": "risk", "summary": "Q1 2026净利润同比降54.96%，财务费用暴增1767%，增收不增利；3月9日刚登陆北交所(920036)", "source": "https://finance.sina.com.cn/stock/aigc/stockfs/2026-04-29/doc-inhwcvfk6781122.shtml", "trend": "↓", "alert": null}, {"week": "2026-05-25", "customer": "广东九安智能科技股份有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "广东九安智能科技有限公司", "type": "dynamic", "summary": "IPO审核推进中(1月被抽中现场检查)，2月APP因违规收集个人信息被通报，CES2026参展", "source": "https://www.msn.com/zh-cn/news/other/巨头在前-九安智能迎难闯关/ar-AA1TGn5T", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "宜宾盈通智能技术有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "宁波舜宇光电信息有限公司", "type": "dynamic", "summary": "舜宇智行分拆赴港IPO遭质疑：突击分红24亿、采购依赖母公司，市值跌至706亿港元(截至5/11)；5月手机镜头出货约1.04亿件(+1.8% MoM)", "source": "https://news.qq.com/rain/a/20260511A08NMG00", "trend": "→", "alert": null}, {"week": "2026-05-25", "customer": "南昌同兴达精密光电有限公司", "type": "risk", "summary": "Q1 2026净亏损4258万元，经营现金流同比大降438%，应收账款28.91亿高位运行，股价一度逼近跌停", "source": "https://www.nbd.com.cn/rss/msn_reader/articles/4360828.html", "trend": "↓", "alert": null}, {"week": "2026-05-18", "customer": "高创(苏州)电子有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-18", "customer": "阿里云计算有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-18", "customer": "重庆海康威视科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-18", "customer": "苏州米克罗电子科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-18", "customer": "熵基科技(广东)有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-18", "customer": "湖北三赢兴智能光电科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}, {"week": "2026-05-18", "customer": "深圳技威时代科技有限公司", "type": "none", "summary": "本周无异常外部信号", "source": "", "trend": "→", "alert": null}], "sales_stats": {"宁波舜宇光电信息有限公司": {"orders": 3908, "total_rev": 136806864.11, "avg_margin": 20.8, "ytd_rev": 12823317.42}, "广东九安智能科技股份有限公司": {"orders": 580, "total_rev": 126674632.23, "avg_margin": 14.1, "ytd_rev": 22580930.11}, "深圳市杉川机器人有限公司": {"orders": 118, "total_rev": 113499371.84, "avg_margin": 20.2, "ytd_rev": 99733072.61}, "高创(苏州)电子有限公司": {"orders": 42, "total_rev": 87375033.41, "avg_margin": 39.6, "ytd_rev": 84548722.61}, "深圳康佳电子科技有限公司": {"orders": 155, "total_rev": 79566448.42, "avg_margin": 27.9, "ytd_rev": 25040087.11}, "深圳市广和通无线股份有限公司": {"orders": 43, "total_rev": 43832273.84, "avg_margin": 18.6, "ytd_rev": 43830123.84}, "深圳技威时代科技有限公司": {"orders": 428, "total_rev": 35941940.84, "avg_margin": 17.4, "ytd_rev": 5212618.18}, "深圳市吉祥腾达科技有限公司": {"orders": 621, "total_rev": 34005662.02, "avg_margin": 15.8, "ytd_rev": 1116020.0}, "南昌同兴达精密光电有限公司": {"orders": 1582, "total_rev": 32106517.97, "avg_margin": 14.8, "ytd_rev": 6564048.2}, "深圳市韶音科技有限公司": {"orders": 46, "total_rev": 31248152.85, "avg_margin": 25.6, "ytd_rev": 20975325.0}, "杭州觅睿科技股份有限公司": {"orders": 417, "total_rev": 26315802.86, "avg_margin": 17.3, "ytd_rev": 1209013.66}, "苏州米克罗电子科技有限公司": {"orders": 90, "total_rev": 26049213.05, "avg_margin": 17.5, "ytd_rev": 15865113.05}, "湖北三赢兴智能光电科技有限公司": {"orders": 2254, "total_rev": 23553034.73, "avg_margin": 6.7, "ytd_rev": 1610071.56}, "深圳市必联电子有限公司": {"orders": 268, "total_rev": 22567680.21, "avg_margin": 15.7, "ytd_rev": 271536.0}, "河南皓泽电子股份有限公司": {"orders": 134, "total_rev": 18596199.03, "avg_margin": 12.7, "ytd_rev": 3260892.2}, "阿里云计算有限公司": {"orders": 7, "total_rev": 15255396.56, "avg_margin": 11.3, "ytd_rev": 0}, "宜宾盈通智能技术有限公司": {"orders": 209, "total_rev": 13844682.88, "avg_margin": 12.4, "ytd_rev": 11680.0}, "重庆海康威视科技有限公司": {"orders": 106, "total_rev": 12833253.86, "avg_margin": 31.4, "ytd_rev": 3562134.05}, "深圳市鼎盛光电有限公司": {"orders": 26, "total_rev": 11848355.12, "avg_margin": 34.0, "ytd_rev": 5975454.4}, "熵基科技(广东)有限公司": {"orders": 150, "total_rev": 11626118.2, "avg_margin": 25.6, "ytd_rev": 7097734.8}, "深圳市极赛科技有限公司": {"orders": 552, "total_rev": 11261910.62, "avg_margin": 26.3, "ytd_rev": 1329310.56}, "深圳市卓芯微科技有限公司": {"orders": 216, "total_rev": 10898330.0, "avg_margin": 13.6, "ytd_rev": 7798760.0}}};
+const fmt = n => typeof n === 'number' ? parseFloat(n.toFixed(2)) : n;
+const fmtRev = n => n >= 1e8 ? (n/1e8).toFixed(1)+'亿' : n >= 1e4 ? (n/1e4).toFixed(0)+'万' : fmt(n);
+
+let sortCol = 'score', sortDir = -1, selected = null;
+
+function init() {
+  document.getElementById('updateTime').textContent = '更新: 2026-06-03';
+  renderStats();
+  renderTable();
+  document.getElementById('searchInput').addEventListener('input', renderTable);
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => { sortCol = th.dataset.sort; sortDir *= -1; renderTable(); });
+  });
+}
+
+function renderStats() {
+  const cs = DATA.customers;
+  const totalRev = cs.reduce((s,c) => s + (DATA.sales_stats[c.name]?.total_rev||0), 0);
+  const ytdRev = cs.reduce((s,c) => s + (DATA.sales_stats[c.name]?.ytd_rev||0), 0);
+  const avgScore = cs.reduce((s,c) => s + (c.strat_score||0), 0) / cs.length;
+  const signals = DATA.tracking.filter(t => t.type !== 'none').length;
+  document.getElementById('statsRow').innerHTML = [
+    {label:'核心客户', value:cs.length, sub:'家', color:'var(--blue)'},
+    {label:'累计收入', value:fmtRev(totalRev), sub:'历史总计', color:'var(--green)'},
+    {label:'年累计', value:fmtRev(ytdRev), sub:'2026', color:'var(--purple)'},
+    {label:'平均战略分', value:fmt(avgScore), sub:'/10', color:'var(--yellow)'},
+    {label:'本周信号', value:signals, sub:'条', color:'var(--red)'},
+  ].map(c => `<div class="stat-card"><div class="label">${c.label}</div><div class="value" style="color:${c.color}">${c.value}</div><div class="sub">${c.sub}</div></div>`).join('');
+}
+
+function renderTable() {
+  const q = (document.getElementById('searchInput').value || '').toLowerCase();
+  let cs = DATA.customers.filter(c => !q || c.name.toLowerCase().includes(q));
+  
+  cs.sort((a,b) => {
+    let va, vb;
+    switch(sortCol) {
+      case 'name': va=a.name; vb=b.name; break;
+      case 'group': va=a.group_tag||''; vb=b.group_tag||''; break;
+      case 'score': va=a.strat_score||0; vb=b.strat_score||0; break;
+      case 'rev': va=DATA.sales_stats[a.name]?.total_rev||0; vb=DATA.sales_stats[b.name]?.total_rev||0; break;
+      case 'ytd': va=DATA.sales_stats[a.name]?.ytd_rev||0; vb=DATA.sales_stats[b.name]?.ytd_rev||0; break;
+      case 'margin': va=DATA.sales_stats[a.name]?.avg_margin||0; vb=DATA.sales_stats[b.name]?.avg_margin||0; break;
+      default: va=0; vb=0;
+    }
+    return typeof va === 'string' ? va.localeCompare(vb) * sortDir : (va - vb) * sortDir;
+  });
+
+  document.getElementById('rowCount').textContent = `${cs.length} 家`;
+  document.getElementById('custBody').innerHTML = cs.map(c => {
+    const s = DATA.sales_stats[c.name] || {};
+    const sc = c.strat_score || 0;
+    const scColor = sc >= 8 ? 'var(--green)' : sc >= 5 ? 'var(--blue)' : 'var(--yellow)';
+    const tagClass = c.group_tag === 'A' ? 'tag-a' : c.group_tag === 'B' ? 'tag-b' : 'tag-c';
+    return `<tr class="${selected===c.id?'selected':''}" onclick="selectCustomer(${c.id})">
+      <td><strong>${c.name}</strong></td>
+      <td><span class="tag ${tagClass}">${c.group_tag||'-'}</span></td>
+      <td><span class="score-bar"><span class="fill" style="width:${sc*10}%;background:${scColor}"></span></span>${sc}</td>
+      <td class="rev">${fmtRev(s.total_rev||0)}</td>
+      <td class="rev ${(s.ytd_rev||0)>1e6?'rev-up':''}">${fmtRev(s.ytd_rev||0)}</td>
+      <td>${fmt(s.avg_margin||0)}%</td>
+    </tr>`;
+  }).join('');
+}
+
+function selectCustomer(id) {
+  selected = id;
+  renderTable();
+  const c = DATA.customers.find(x => x.id === id);
+  if (!c) return;
+  const s = DATA.sales_stats[c.name] || {};
+  const ct = DATA.tracking.filter(t => t.customer === c.name).slice(0, 8);
+  document.getElementById('detailPanel').innerHTML = `
+    <div class="detail-panel">
+      <h3>${c.name} <span class="tag ${c.group_tag==='A'?'tag-a':c.group_tag==='B'?'tag-b':'tag-c'}">${c.group_tag||'-'}</span></h3>
+      <div class="detail-section"><div class="s-title">行业</div><div class="s-text">${c.industry||'-'}</div></div>
+      <div class="detail-section"><div class="s-title">合作历史</div><div class="s-text">${c.coop_history||'-'}</div></div>
+      <div class="detail-section"><div class="s-title">备注</div><div class="s-text">${c.notes||'-'}</div></div>
+      <div class="detail-section"><div class="s-title">监控关键词</div><div class="s-text">${c.monitor_keywords||'-'}</div></div>
+      <div class="detail-section">
+        <div class="s-title">财务数据</div>
+        <div class="s-text">
+          累计收入: ${fmtRev(s.total_rev||0)} · 年累计: ${fmtRev(s.ytd_rev||0)}<br>
+          订单数: ${s.orders||0} · 毛利率: ${fmt(s.avg_margin||0)}%
+        </div>
+      </div>
+      ${ct.length > 0 ? `
+      <div class="detail-section">
+        <div class="s-title">最近情报信号</div>
+        <div class="tracking-list">${ct.map(t => `
+          <div class="tracking-item">
+            <span class="t-week">${t.week}</span>
+            <span class="t-type t-type-${t.type}">${t.type==='none'?'无':t.type}</span>
+            ${t.summary}<br><span style="color:var(--muted);font-size:10px">${t.source||''} ${t.trend||''}</span>
+          </div>`).join('')}</div>
+      </div>` : ''}
+      <div class="detail-section">
+        <div class="s-title">战略评分</div>
+        <div class="s-text" style="font-size:24px;font-weight:700;color:${(c.strat_score||0)>=8?'var(--green)':(c.strat_score||0)>=5?'var(--blue)':'var(--yellow)'}">${c.strat_score}/10</div>
+      </div>
+    </div>`;
+}
+
+init();
+</script>
+</body>
+</html>
