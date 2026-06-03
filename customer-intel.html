@@ -56,14 +56,16 @@ body { font-family: -apple-system,'PingFang SC',sans-serif; background:var(--bg)
 .alert-bar .alert-cust { font-size:10px; color:var(--muted); flex-shrink:0; }
 
 /* All-signals scrolling feed */
-.signal-feed { background:var(--card); border-bottom:1px solid var(--border); overflow:hidden; flex-shrink:0; height:28px; position:relative; }
-.signal-feed-inner { display:flex; gap:24px; white-space:nowrap; animation:scrollFeed 60s linear infinite; padding:5px 16px; }
+.signal-feed { background:var(--card); border-bottom:1px solid var(--border); overflow:hidden; flex-shrink:0; position:relative; }
+.signal-feed-label { position:absolute; left:0; top:0; bottom:0; z-index:2; background:var(--card); padding:6px 10px; font-size:10px; font-weight:600; color:var(--cyan); display:flex; align-items:center; gap:4px; border-right:1px solid var(--border); white-space:nowrap; }
+.signal-feed-track { overflow:hidden; margin-left:70px; }
+.signal-feed-inner { display:flex; gap:32px; white-space:nowrap; animation:scrollFeed 80s linear infinite; padding:7px 0; }
 .signal-feed:hover .signal-feed-inner { animation-play-state:paused; }
 @keyframes scrollFeed { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
-.feed-item { font-size:11px; display:flex; align-items:center; gap:4px; flex-shrink:0; }
-.feed-item .f-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
-.feed-item .f-cust { color:var(--muted); }
-.feed-item .f-text { color:var(--text); max-width:300px; overflow:hidden; text-overflow:ellipsis; }
+.feed-item { font-size:11px; display:flex; align-items:center; gap:5px; flex-shrink:0; }
+.feed-item .f-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.feed-item .f-cust { color:var(--muted); flex-shrink:0; }
+.feed-item .f-text { color:var(--text); }
 
 /* Detail */
 .d-header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-shrink:0; }
@@ -144,7 +146,10 @@ body { font-family: -apple-system,'PingFang SC',sans-serif; background:var(--bg)
   <!-- Alert bar -->
   <div class="alert-bar" id="alertBar"></div>
   <!-- Scrolling feed -->
-  <div class="signal-feed" id="signalFeed"><div class="signal-feed-inner" id="feedInner"></div></div>
+  <div class="signal-feed" id="signalFeed">
+    <div class="signal-feed-label">📡 实时情报</div>
+    <div class="signal-feed-track"><div class="signal-feed-inner" id="feedInner"></div></div>
+  </div>
   <!-- Detail -->
   <div class="scrollbar" id="mainPanel" style="flex:1;overflow-y:auto;">
     <div class="empty">← 选择客户查看情报详情</div>
